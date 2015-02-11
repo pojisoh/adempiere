@@ -84,7 +84,6 @@ import org.compiere.util.DisplayType;
 import org.compiere.util.Env;
 import org.compiere.util.Msg;
 import org.compiere.util.SecureEngine;
-import org.compiere.util.Util;
 import org.compiere.util.ValueNamePair;
 import org.zkoss.zk.au.out.AuFocus;
 import org.zkoss.zk.ui.Component;
@@ -98,7 +97,6 @@ import org.zkoss.zkex.zul.North;
 import org.zkoss.zkex.zul.South;
 import org.zkoss.zul.Comboitem;
 import org.zkoss.zul.Hbox;
-import org.zkoss.zul.ListSubModel;
 
 /**
  *  This class is based on org.compiere.apps.search.Find written by Jorg Janke.
@@ -210,9 +208,6 @@ public class FindWindow extends Window implements EventListener,ValueChangeListe
 	/** Search messages using translation */
 	private String				m_sLast;
 	private String				m_sNew;
-	private String				m_sTipText;  // Text to display in ComboBoc	
-	private String				m_sToolTipText;  // Tool tip text to display 
-
 	
 	private static final String FIELD_SEPARATOR = "<^>";
 	private static final String SEGMENT_SEPARATOR = "<~>";
@@ -404,12 +399,8 @@ public class FindWindow extends Window implements EventListener,ValueChangeListe
         btnSave.addEventListener(Events.ON_CLICK, this);
 
         fQueryName = new Combobox();
-        fQueryName.setTooltiptext(m_sToolTipText);
+        fQueryName.setTooltiptext(Msg.getMsg(Env.getCtx(),"QueryName"));
 		fQueryName.setReadonly(false);
-		fQueryName.addEventListener(Events.ON_FOCUS, this);
-		fQueryName.addEventListener(Events.ON_BLUR, this);
-        fQueryName.addEventListener(Events.ON_SELECT, this);
-
 
         Button btnOk = new Button();
         btnOk.setName("btnOkAdv");
@@ -434,7 +425,9 @@ public class FindWindow extends Window implements EventListener,ValueChangeListe
         toolBar.appendChild(fQueryName);
         toolBar.appendChild(btnSave);
         toolBar.setWidth("100%");
-        fQueryName.setStyle("margin-left: 3px; margin-right: 3px; position: relative; top: 5px;");        
+        fQueryName.setStyle("margin-left: 3px; margin-right: 3px; position: relative; top: 5px;");
+        fQueryName.addEventListener(Events.ON_SELECT, this);
+        
 
         btnSave.setDisabled(m_AD_Tab_ID <= 0);
 
@@ -525,9 +518,6 @@ public class FindWindow extends Window implements EventListener,ValueChangeListe
         tabPanel.setStyle("height: 100%; width: 100%");
         tabPanel.appendChild(winAdvanced);
         winMain.addTab(tabPanel, Msg.getMsg(Env.getCtx(), "Advanced").replaceAll("&", ""), false, false);
-        m_sTipText = "<".concat(Msg.getMsg(Env.getCtx(),"SelectOrEnterQueryName")).concat(">");
-		m_sToolTipText = Msg.getMsg(Env.getCtx(),"SelectOrEnterQueryNameToolTip");
-		
         initSimple();
         initAdvanced();
 
@@ -1043,21 +1033,12 @@ public class FindWindow extends Window implements EventListener,ValueChangeListe
     		else if (event.getTarget() == fQueryName)
     		{
     			int index = fQueryName.getSelectedIndex();
-    			if(index < 0) 
-    			{
-    				if (fQueryName.getSelectedItem() == null || fQueryName.getSelectedItem().equals(m_sTipText))
-    				{
-    					return;
-    				}
-    			}
-    			else if(index == 0) 
-    			{ // no query - wipe and start over.
+    			if(index < 0) return;
+    			if(index == 0) { // no query - wipe and start over.
     		        List<?> rowList = advancedPanel.getChildren();
     		        for (int rowIndex = rowList.size() - 1; rowIndex >= 1; rowIndex--)
     		        	rowList.remove(rowIndex);
-    				createFields();
-                    fQueryName.setSelectedIndex(-1);
-                    fQueryName.setText(m_sTipText);
+    				createFields();  
     			}
     			else parseUserQuery(userQueries[index-1]);
     		}
@@ -1077,18 +1058,13 @@ public class FindWindow extends Window implements EventListener,ValueChangeListe
                 else if ("btnDeleteAdv".equals(button.getAttribute("name").toString()))
                 {
                     int index = advancedPanel.getSelectedIndex();
-                    if (index >= 0)
-                    {
-                    	advancedPanel.getSelectedItem().detach();
-                    	advancedPanel.setSelectedIndex(--index);
-                    	//refreshUserQueries();
-                    }
+                    advancedPanel.getSelectedItem().detach();
+                    advancedPanel.setSelectedIndex(--index);
                 }
 
                 else if ("btnSaveAdv".equals(button.getAttribute("name").toString()))
                 {
-                	// Save the query but don't overwrite the Last query
-                	cmd_save(false);
+                	cmd_save(true);
                 }
             }
             //  Confirm panel actions
@@ -1149,44 +1125,12 @@ public class FindWindow extends Window implements EventListener,ValueChangeListe
 				{
 					cmd_ok_Simple();
 					dispose();
-				}
+        }
 			}
 		}
-        else if (Events.ON_FOCUS.equals(event.getName()))
-        {
-        	if (event.getTarget() == fQueryName)
-    		{
-        		// fQueryName received the focus - delete the tip text so the user can type without 
-        		// having to delete the tip.
-    			int index = fQueryName.getSelectedIndex();
-    			if(index < 0) 
-    			{
-    				if (fQueryName.getSelectedItem() == null || fQueryName.getSelectedItem().equals(m_sTipText))
-    				{
-                        fQueryName.setSelectedIndex(-1);
-                        fQueryName.setText("");
-    				}
-    			}
-    		}
-        }
-        else if (Events.ON_BLUR.equals(event.getName()))
-        {
-        	if (event.getTarget() == fQueryName)
-    		{
-        		// fQueryName lost the focus. If the field is blank, replace the tip text.
-				if (fQueryName.getSelectedItem() != null && fQueryName.getSelectedItem().equals(""))
-    			{
-                    fQueryName.setText(m_sTipText);
-				}
-    		}
-        }
+
     }   //  onEvent
 
-    /** 
-     * Parse a user query from the database and fill the advanced query table.  The query is saved 
-     * in the database as a coded string.  See {@link #codeUserQuery()}.
-     * @param userQuery	The user query to parse.
-     */
     private void parseUserQuery(MUserQuery userQuery)
     {
 		String code = userQuery.getCode();
@@ -1289,99 +1233,9 @@ public class FindWindow extends Window implements EventListener,ValueChangeListe
 
 	}	//	parseValue
 
-	/**
-	 * Save the advanced query in the database using the query name. If the query name is set,
-	 * the query will be updated or a new query saved.
-	 * @param saveQuery	Save the query as the Last Query.  Set to true when running the query.
-	 * Set to false to only save using the query name.
-	 */
     private void cmd_save(boolean saveQuery)
 	{
 		//
-    	StringBuffer code = codeUserQuery();
-		//  Save the query
-		//  Every query is saved automatically as ** Last Query ** when run.
-		//  Queries run without a name will not be saved.
-
-		String name = fQueryName.getValue();
-		if (name == null)
-		{
-			return;
-		}
-		
-		if (name.equals(m_sNew) || name.equals(m_sLast) || name.equals(m_sTipText) || Util.isEmpty(name, true )) 
-		{
-			// No name to save to.  Just run the query.
-		}
-		else  // Save the query in the database.
-		{
-			MUserQuery uq = MUserQuery.get(Env.getCtx(), m_AD_Tab_ID, name);
-			if (code.length() > 0) { // New or updated
-				if (uq == null) // Create a new record
-				{
-					uq = new MUserQuery (Env.getCtx(), 0, null);
-					uq.setName (name);
-					uq.setAD_Table_ID(m_AD_Table_ID);
-					uq.setAD_Tab_ID(m_AD_Tab_ID); //red1 UserQuery [ 1798539 ] taking in new field from Compiere
-					uq.setAD_User_ID(Env.getAD_User_ID(Env.getCtx())); //red1 - [ 1798539 ] missing in Compiere delayed source :-)
-				}
-				uq.setCode (code.toString());  // Update the query code
-				
-			} 
-			else	if (code.length() <= 0) // Delete the query
-			{
-				if (uq.delete(true))
-				{
-					FDialog.info (m_targetWindowNo, this, "Deleted", name);
-					refreshUserQueries();
-				}
-				else
-					FDialog.warn (m_targetWindowNo, this, "DeleteError", name);
-				return;
-			}
-			//
-			if (uq.save())
-			{
-				//FDialog.info (m_targetWindowNo, this, "Saved", name);
-				refreshUserQueries();
-			}
-			else
-				FDialog.warn (m_targetWindowNo, this, "SaveError", name);
-		}
-		//
-		//  Save the query as the Last Query.
-		if (saveQuery)
-		{
-			MUserQuery last = MUserQuery.get(Env.getCtx(), m_AD_Tab_ID, m_sLast);
-			if (code.length() > 0) { // New or update				
-				if (last == null) // Create a new record
-				{
-					last = new MUserQuery (Env.getCtx(), 0, null);
-					last.setName (m_sLast);
-					last.setAD_Table_ID (m_AD_Table_ID);
-					last.setAD_Tab_ID(m_AD_Tab_ID); 
-					last.setAD_User_ID(Env.getAD_User_ID(Env.getCtx())); 
-				}
-				last.setCode (code.toString());  // Update the query code
-			} else	if (code.length() <= 0){ // Delete the query
-				if (last != null && !last.delete(true))
-					FDialog.warn (m_targetWindowNo, this, "DeleteError", name);
-				return;
-			}
-
-			if (!last.save())
-				FDialog.warn (m_targetWindowNo, this, "SaveError", name);
-		}
-	}	//	cmd_save
-
-    /**
-     * Code the query parameters entered in the table into a string that can be saved in the database.
-     * This is the counterpart to {@link #parseUserQuery()}. Also updates the {@link #m_query} variable with 
-     * the current query information.
-     * @return a StringBuffer containing the coded query information.
-     */
-	private StringBuffer codeUserQuery() {
-		
 		m_query = new MQuery(m_tableName);
 		StringBuffer code = new StringBuffer();
 
@@ -1498,8 +1352,70 @@ public class FindWindow extends Window implements EventListener,ValueChangeListe
 				.append(FIELD_SEPARATOR)
 				.append(rBrackets != null ? rBrackets : "");
 		}
-		return code;
-	}
+		
+		String selected = fQueryName.getValue();
+		if (selected != null) {
+			String name = selected;
+			if ((fQueryName.getSelectedIndex() == 0 || name.equals(m_sLast)) && saveQuery){ // New query - needs a name
+
+				FDialog.warn (m_targetWindowNo, this, "NeedsName", name);
+				return;
+			}
+			if (saveQuery){
+				MUserQuery uq = MUserQuery.get(Env.getCtx(), m_AD_Tab_ID, name);
+				if (code.length() > 0) { // New or updated
+					if (uq == null) // Create a new record
+					{
+						uq = new MUserQuery (Env.getCtx(), 0, null);
+						uq.setName (name);
+						uq.setAD_Table_ID(m_AD_Table_ID);
+						uq.setAD_Tab_ID(m_AD_Tab_ID); //red1 UserQuery [ 1798539 ] taking in new field from Compiere
+						uq.setAD_User_ID(Env.getAD_User_ID(Env.getCtx())); //red1 - [ 1798539 ] missing in Compiere delayed source :-)
+					}
+					uq.setCode (code.toString());  // Update the query code
+					
+				} else	if (code.length() <= 0){ // Delete the query
+					if (uq.delete(true))
+					{
+						FDialog.info (m_targetWindowNo, this, "Deleted", name);
+						refreshUserQueries();
+					}
+					else
+						FDialog.warn (m_targetWindowNo, this, "DeleteError", name);
+					return;
+				}
+				//
+				if (uq.save())
+				{
+					FDialog.info (m_targetWindowNo, this, "Saved", name);
+					refreshUserQueries();
+				}
+				else
+					FDialog.warn (m_targetWindowNo, this, "SaveError", name);
+			}
+			//
+			MUserQuery last = MUserQuery.get(Env.getCtx(), m_AD_Tab_ID, m_sLast);
+			if (code.length() > 0) { // New or update				
+				if (last == null) // Create a new record
+				{
+					last = new MUserQuery (Env.getCtx(), 0, null);
+					last.setName (m_sLast);
+					last.setAD_Table_ID (m_AD_Table_ID);
+					last.setAD_Tab_ID(m_AD_Tab_ID); 
+					last.setAD_User_ID(Env.getAD_User_ID(Env.getCtx())); 
+				}
+				last.setCode (code.toString());  // Update the query code
+			} else	if (code.length() <= 0){ // Delete the query
+				if (!last.delete(true))
+					FDialog.warn (m_targetWindowNo, this, "DeleteError", name);
+				return;
+			}
+
+			if (!last.save())
+				FDialog.warn (m_targetWindowNo, this, "SaveError", name);
+		}
+	}	//	cmd_save
+
 	private void refreshUserQueries()
 	{
 		String value = m_sLast;
@@ -1521,12 +1437,8 @@ public class FindWindow extends Window implements EventListener,ValueChangeListe
 			}
 		}
 
-		if(!selected) 
-		{
-			fQueryName.setSelectedIndex(-1);
-			fQueryName.setText(m_sTipText);
-			createFields();
-		}		
+		if(!selected) fQueryName.setSelectedIndex(0);
+		
 	}
 
     /**
@@ -1856,7 +1768,7 @@ public class FindWindow extends Window implements EventListener,ValueChangeListe
     {
         m_isCancel = false; // teo_sarca [ 1708717 ]
         //  save pending
-        cmd_save(true); // Always save and update the last query run
+        cmd_save(false);
         if (getNoOfRecords(m_query, true) != 0)
           dispose();
     }   //  cmd_ok_Advanced
